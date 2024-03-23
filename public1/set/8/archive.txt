@@ -1,0 +1,4 @@
+2024 02 24 21:53:57 OrbitProjectManager: <info> Service deployment successful
+
+[2024-02-24 21:54:35] [debug] [StratoVirtualHost] - Attempting retry for a network request
+24.02.2024.21h:59m:14s debug NexusGatewayService --- Applied rate limiting due to excessive requests

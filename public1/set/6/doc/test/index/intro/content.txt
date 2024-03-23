@@ -1,0 +1,2 @@
+[2024-02-28 19:44:30] [debug] [GreenTechRenewableResources] - Completed TLS handshake with the server
+2024 02 28 19:45:55 EchoSupportDesk: <debug> Established WebSocket connection

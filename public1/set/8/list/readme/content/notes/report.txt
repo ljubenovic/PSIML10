@@ -1,0 +1,5 @@
+
+27.02.2024.00:53:39 CEF:0|QuantumStorageSolutions|loglevel=debug msg=Started monitoring a directory for changes
+
+
+27.02.2024.00:55:14 CEF:0|UnityTeamNetwork|loglevel=info msg=Disk I/O bottleneck resolved

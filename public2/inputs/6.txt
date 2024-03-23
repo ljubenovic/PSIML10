@@ -1,0 +1,2 @@
+@@DATASET_DIR@@\6\video.mp4
+@@DATASET_DIR@@\6\sound.npy

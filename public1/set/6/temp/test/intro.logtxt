@@ -1,0 +1,5 @@
+
+
+25.02.2024.07h:26m:17s the-warning InsightUserAnalytics --- Anomaly detected in user behavior
+[2024-02-25 07:28:03] [debug] [DataHubEngine] - Encountered cache miss for a requested data item
+25.02.2024.07:31:25 CEF:0|GuardianAntiMalware|loglevel=warning msg=Anomaly detected in user behavior
