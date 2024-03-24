@@ -1,5 +1,5 @@
-16
-565
-13
-a, for, data, to, in
-7140
+6
+227
+5
+a, for, in, detected, to
+19122

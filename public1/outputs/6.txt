@@ -1,5 +1,5 @@
-48
-1894
-39
-a, for, data, to, in
-42326
+21
+808
+17
+a, for, data, to, detected
+72017

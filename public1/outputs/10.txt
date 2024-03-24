@@ -1,5 +1,5 @@
-132
-5262
-116
-a, for, to, data, detected
-23421
+5
+73
+4
+a, for, detected, data, the
+42230

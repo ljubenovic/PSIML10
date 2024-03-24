@@ -1,5 +1,5 @@
-93
-3691
-80
-a, for, to, data, in
-30286
+45
+1797
+41
+a, for, to, detected, data
+55078
