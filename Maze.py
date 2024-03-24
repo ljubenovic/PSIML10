@@ -1,4 +1,4 @@
-from PIL import Image
+import imageio
 import numpy as np
 from collections import deque
 
@@ -26,7 +26,7 @@ def is_valid_move(maze, visited, row, col):
     return (0 <= row < maze.shape[0]) and (0 <= col < maze.shape[1]) and (maze[row,col] == 1) and (not visited[row,col])
 
 
-def bfs(maze, start, possible_ends):
+def bfs(maze, start, possible_ends, teleports=[]):
     height, width = maze.shape
     visited = np.zeros((height, width))
     queue = deque([(start, 0)])
@@ -41,30 +41,14 @@ def bfs(maze, start, possible_ends):
             if is_valid_move(maze, visited, new_row, new_col):
                 visited[new_row][new_col] = 1
                 queue.append(((new_row, new_col), distance + 1))
-    return -1
-
-def bfs_with_teleports(maze, start, possible_ends, teleports):
-    height, width = maze.shape
-    visited = np.zeros((height, width))
-    queue = deque([(start, 0)])
-    visited[start] = 1
-
-    while queue:
-        (row, col), distance = queue.popleft()
-        if (row, col) in possible_ends:
-            return distance + 1
-        for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-            new_row, new_col = row + dr, col + dc
-            if is_valid_move(maze, visited, new_row, new_col):
-                visited[new_row][new_col] = 1
-                queue.append(((new_row, new_col), distance + 1))
-        if (row, col) in teleports:
-            other_teleports = [teleport for teleport in teleports if teleport != (row, col)]
-            for teleport in other_teleports:
-                (tel_row, tel_col) = teleport
-                if is_valid_move(maze, visited, tel_row, tel_col):
-                    visited[tel_row][tel_col] = 1
-                    queue.append(((tel_row, tel_col), distance + 1))
+        if teleports:
+            if (row, col) in teleports:
+                other_teleports = [teleport for teleport in teleports if teleport != (row, col)]
+                for teleport in other_teleports:
+                    (tel_row, tel_col) = teleport
+                    if is_valid_move(maze, visited, tel_row, tel_col):
+                        visited[tel_row][tel_col] = 1
+                        queue.append(((tel_row, tel_col), distance + 1))
 
     return -1
  
@@ -96,10 +80,7 @@ def find_shortest_path(maze, entrances, teleports = []):
                 possible_exits += expanded_entrances[j]
         
         for start in entrance:
-            if not teleports:            
-                distance = bfs(maze, start, possible_exits)
-            else:
-                distance = bfs_with_teleports(maze, start, possible_exits, teleports)
+            distance = bfs(maze, start, possible_exits, teleports)
             if (distance != -1) and distance < shortest_path:
                 shortest_path = distance
 
@@ -110,13 +91,14 @@ def find_shortest_path(maze, entrances, teleports = []):
 
 # ---main---
 
-image_path = r'public3\set\09.png'
-#image_path = input()
+#image_path = r'public3\set\09.png'
+image_path = input()
 N_teleports = int(input())
 teleports = [tuple(map(int, input().split())) for _ in range(N_teleports)]
 
-image = Image.open(image_path)
-image = image.convert("L")
+image = imageio.v2.imread(image_path)
+image = np.dot(image[...,:3], [0.2989, 0.5870, 0.1140])
+
 maze = np.array(image)/np.max(image)
 
 entrances = find_entrances(maze)
