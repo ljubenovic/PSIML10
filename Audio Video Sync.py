@@ -1,6 +1,5 @@
 import numpy as np
 import imageio
-import sys
 from typing import Tuple
 
 # Some filtering functions from scipy.signal
@@ -31,24 +30,6 @@ def lp2lp_zpk(z, p, k, wo=1.0):
     p_lp = wo * p
     k_lp = k * wo**degree
     return z_lp, p_lp, k_lp
-
-def lp2bp_zpk(z, p, k, wo=1.0, bw=1.0):
-    z = np.atleast_1d(z)
-    p = np.atleast_1d(p)
-    wo = float(wo)
-    bw = float(bw)
-    degree = _relative_degree(z, p)
-    z_lp = z * bw/2
-    p_lp = p * bw/2
-    z_lp = z_lp.astype(complex)
-    p_lp = p_lp.astype(complex)
-    z_bp = np.concatenate((z_lp + np.sqrt(z_lp**2 - wo**2),
-                           z_lp - np.sqrt(z_lp**2 - wo**2)))
-    p_bp = np.concatenate((p_lp + np.sqrt(p_lp**2 - wo**2),
-                           p_lp - np.sqrt(p_lp**2 - wo**2)))
-    z_bp = np.append(z_bp, np.zeros(degree))
-    k_bp = k * bw**degree
-    return z_bp, p_bp, k_bp
 
 def bilinear_zpk(z, p, k, fs):
     z = np.atleast_1d(z)
@@ -102,19 +83,6 @@ def butterworth_lowpass(N: int, Wn: float) -> Tuple[np.ndarray, np.ndarray]:
     b, a = zpk2tf(z, p, k)
     return b, a
 
-def butterworth_bandpass(N: int, Wn: Tuple[float, float]) -> Tuple[np.ndarray, np.ndarray]:
-    Wn = np.array(Wn)
-    assert np.size(Wn) == 2, "Must specify a single critical frequency Wn for lowpass or highpass filter"
-    assert np.all(Wn > 0) and np.all(Wn < 1), "Digital filter critical frequencies must be 0 < Wn < 1"
-    z, p, k = buttap(N)
-    warped = 4 * np.tan(np.pi * Wn / 2) # digital
-    bw = warped[1] - warped[0]
-    wo = np.sqrt(warped[0] * warped[1])
-    z, p, k = lp2bp_zpk(z, p, k, wo=wo, bw=bw)
-    z, p, k = bilinear_zpk(z, p, k, fs=2)
-    b, a = zpk2tf(z, p, k)
-    return b, a
-
 
 def lfilter(b, a, x):
     a = np.array(a)
@@ -135,7 +103,6 @@ def lfilter(b, a, x):
 
 
 # Other functions
-
 
 def frame_binarization(frame):
     frame_gray = np.dot(frame[...,:3], [0.2989, 0.5870, 0.1140])
@@ -188,28 +155,35 @@ def bin_image_labeling(img_bin):
                     bw_img[x+1,y-1] = label
                 if (x!=height-1) and (img_bin[x+1,y] == 1):
                     bw_img[x+1,y] = label
-                if (x!=0) and (y!=width-1) and (img_bin[x+1,y+1] == 1):
+                if (x!=height-1) and (y!=width-1) and (img_bin[x+1,y+1] == 1):
                     bw_img[x+1,y+1] = label
     if label > 1:
-        for x in range(0,height):
-            for y in range(0,width):
+        for x in range(2,height-3):
+            for y in range(2,width-3):
                 if bw_img[x,y] != 0:
                     mask = bw_img[x-2:x+3,y-2:y+3]
                     mask[mask>0] = np.min(mask[mask>0])
                     bw_img[x-2:x+3,y-2:y+3] = mask
     vals = np.unique(bw_img)
+    surfaces = []
     for i in range(len(vals)):
         bw_img[bw_img == vals[i]] = i
     return bw_img
 
 
-def find_leftmost_circle_center(bin_img):
-    bw_img = bin_image_labeling(bin_img)
-    vals = np.unique(bw_img)   
-    left_ind = float('inf') 
+def find_leftmost_circle_center(img_without_rec,rectangle_edges):
+
+    (x_edges,y_edges) = rectangle_edges
+    img_without_rec = bin_first_frame
+    img_without_rec[x_edges[0]:x_edges[3]+1,y_edges[0]:y_edges[3]+1]=0
+
+    bw_img = bin_image_labeling(img_without_rec)
+    vals = np.unique(bw_img) 
+    N_circles = len(vals)-1  
+    left_ind = float('inf')
     for val in vals:
         if val != 0:
-            circle = np.zeros_like(bin_img)
+            circle = np.zeros_like(img_without_rec)
             circle[bw_img==val]=1
             
             vertical_edges = np.abs(np.diff(circle,axis=0))
@@ -228,7 +202,7 @@ def find_leftmost_circle_center(bin_img):
                 y_center = int((y_ind_1+y_ind_2)/2) + 1
 
 
-    return (x_center,y_center)
+    return (x_center,y_center,N_circles)
 
 
 def find_peaks(data, min_distance=1):
@@ -242,108 +216,157 @@ def find_peaks(data, min_distance=1):
     return peaks
 
 
-def find_video_bounces(video_frames,bin_first_frame,x_edges,y_edges):
+def multiple_bounces(bounce):
+    
+    flag = False
+    
+    arr = np.sum(bounce,axis=0)
+    arr[arr>1]=1
+    start_indices = np.where(np.logical_and(arr[:-2] == 1, np.logical_and(arr[1:-1] == 0, arr[2:] == 1)))[0]
+    for idx in start_indices:
+        arr[idx + 1] = 1
+    diffs = np.abs(np.diff(arr))
+    if np.sum(diffs) > 3:
+        flag = True
+    else:
+        arr = np.sum(bounce,axis=1)
+        arr[arr>1]=1
+        start_indices = np.where(np.logical_and(arr[:-2] == 1, np.logical_and(arr[1:-1] == 0, arr[2:] == 1)))[0]
+        for idx in start_indices:
+            arr[idx + 1] = 1
+        diffs = np.abs(np.diff(arr))
+        if np.sum(diffs) > 3:
+            flag = True
+    
+    return flag
+
+
+def find_video_bounces(video_frames,bin_first_frame,rectangle_edges,N_circles):
+
+    (x_edges,y_edges) = rectangle_edges
+    (height,width) = bin_first_frame.shape
+
+    rectangle_mask = np.zeros_like(bin_first_frame)
+    rectangle_mask[x_edges[0]:x_edges[3]+2,y_edges[0]:y_edges[3]+3] = 1
     edges_mask = np.zeros_like(bin_first_frame)
     rectangle_width = 2
     edge_width = 3
-    edges_mask[x_edges[0]-rectangle_width:x_edges[0],y_edges[0]-rectangle_width:y_edges[3]+rectangle_width+1]=1
-    edges_mask[x_edges[3]+1:x_edges[3]+rectangle_width+1,y_edges[0]-rectangle_width:y_edges[3]+rectangle_width+1]=1
-    edges_mask[x_edges[0]-rectangle_width:x_edges[3]+rectangle_width+1,y_edges[0]-rectangle_width:y_edges[0]]=1
-    edges_mask[x_edges[0]-rectangle_width:x_edges[3]+rectangle_width+1,y_edges[3]+1:y_edges[3]+rectangle_width+1]=1
+    edges_mask[x_edges[0]+1-rectangle_width:x_edges[3]+1+rectangle_width,y_edges[0]-rectangle_width:y_edges[3]+2+rectangle_width]=1
     edges_mask[0:edge_width,:] = 1
     edges_mask[height-edge_width:height,:] = 1
     edges_mask[:,0:edge_width] = 1
     edges_mask[:,width-edge_width:width] = 1
-
-    def find_different_bounces(bounce):
-        if np.any(bounce):
-            N_diff = 1
-        ver = np.abs(np.diff(bounce,axis=1))
-        for i in range(3):
-            if np.sum(ver[i,:])>2:
-                N_diff += 1
-        
-        return N_diff
-
-    import matplotlib.pyplot as plt
-    plt.figure(figsize = (15,10))
-    plt.imshow(edges_mask,cmap='gray');
-
+    
     bounces = []
     last_bounce = np.zeros_like(edges_mask)
     
+    flag = True
     for i in range(len(video_frames)):
 
-        frame = video_frames[i]
-        bin_frame = frame_binarization(frame)
-        bounce = bin_frame*edges_mask
+        bin_frame = frame_binarization(video_frames[i])
+        frame_without_rec = bin_frame - rectangle_mask
+        frame_without_rec[frame_without_rec < 0] = 0
         
+        bounce = frame_without_rec*edges_mask
+
         if np.any(bounce):
             if not np.any(bounce*last_bounce):
                 bounces.append(i)
-                plt.figure(figsize = (15,10))
-                plt.imshow(bin_frame*edges_mask,cmap='gray');
+                flag = True
+            elif flag:
+                
+                if multiple_bounces(bounce):
+                    bounces.append(i)
+                    flag = False
+        else:
+            flag = True
         last_bounce = bounce
-        
-    N_bounces = len(bounces)
-    return (N_bounces,bounces)
+
+    return bounces
+
+
+def audio_video_sync(t_peaks,t_bounces,FPS):
+
+    N_bounces = len(t_bounces)
+    N_peaks = len(t_peaks)
+
+    best_match = float('inf')
+    
+    for i1 in range(N_bounces-1):
+
+        t = t_bounces[i1]-t_peaks[0]
+        if (t < 0):
+            continue
+        else:
+            matches = np.zeros((N_bounces-i1-1))
+            for j in range(i1+1,N_bounces):   
+                matches[j-i1-1] = np.abs(t_bounces[j]-t_peaks[1]-t)
+
+            best_match_ind = np.unravel_index(np.argmin(matches), matches.shape)
+            best_match_tmp = matches[best_match_ind]
+
+            if (best_match_tmp < best_match) and (t_bounces[j] > t_peaks[1]):
+                t_start_frame = t
+                best_match = best_match_tmp
+
+            matches = np.zeros((N_bounces-i1-1))
+            for j in range(i1+1,N_bounces):   
+                matches[j-i1-1] = np.abs(t_bounces[j]-t_peaks[2]-t)
+
+            best_match_ind = np.unravel_index(np.argmin(matches), matches.shape)
+            best_match_tmp = matches[best_match_ind]
+
+            if (best_match_tmp < best_match) and (t_bounces[j] > t_peaks[2]):
+                t_start_frame = t
+                best_match = best_match_tmp
+
+    N_start_frame = int(np.floor(t_start_frame*FPS))
+    N_start_frame += 3  # kompenzacija kasnjenja, uvek sam za bounce uzimala prvi frejm u kome objekat dotakne ivicu
+    return N_start_frame
+
 
 # --- main ---
 
-for i in range(10):
+#audio_path = 'public2\set\4\sound.npy'
+#video_path = r'public2\set\4\video.mp4'
+video_path = input()
+audio_path = input()
 
-    audio_path = 'public2\set\{}\sound.npy'.format(i)
-    video_path = r'public2\set\{}\video.mp4'.format(i)
-    #video_path = input()
-    #audio_path = input()
+# video processing
+FPS = 30
+video = imageio.get_reader(video_path, 'ffmpeg')
+video_frames = []
+for image in video:
+    video_frames.append(np.array(image))
+video = np.array(video_frames)
 
-    # video processing
-    FPS = 30
-    video = imageio.get_reader(video_path, 'ffmpeg')
-    video_frames = []
-    for image in video:
-        video_frames.append(np.array(image))
-    video = np.array(video_frames)
+bin_first_frame = frame_binarization(video[0,:,:,:])
+(r_center_x, r_center_y, rectangle_edges) = find_rectangle_center(bin_first_frame)
 
-    (N_frames, height, width, _) = video.shape
-    first_frame = video[0,:,:,:]
-    bin_first_frame = frame_binarization(first_frame)
-    (r_center_x, r_center_y, rectangle_edges) = find_rectangle_center(bin_first_frame)
+(x_center,y_center,N_circles) = find_leftmost_circle_center(bin_first_frame,rectangle_edges)
 
-    (x_edges,y_edges) = rectangle_edges
-    frame_without_rec = bin_first_frame
-    frame_without_rec[x_edges[0]:x_edges[3]+1,y_edges[0]:y_edges[3]+1]=0
+bounces = find_video_bounces(video_frames,bin_first_frame,rectangle_edges,N_circles)
+N_bounces = len(bounces)
+t_bounces = [bounce/FPS for bounce in bounces]
 
-    (x_center,y_center) = find_leftmost_circle_center(frame_without_rec)
+# audio processing
+fs = 44100
+audio = np.load(audio_path)
 
-    (N_bounces,bounces) = find_video_bounces(video_frames,bin_first_frame,x_edges,y_edges)
+(b,a) = butterworth_lowpass(5, 2*np.pi*32/fs)
+audio = lfilter(b,a,audio)
+audio[audio < 0.3*max(audio)] = 0
+peaks = find_peaks(audio)
+N_peaks = len(peaks)
+t_peaks = [peak/fs for peak in peaks]
 
-    # audio processing
-    fs = 44100
-    audio = np.load(audio_path)
+# audio video sync
+N_start_frame = audio_video_sync(t_peaks,t_bounces,FPS)
 
-    (b,a) = butterworth_lowpass(5, 2*np.pi*32/fs)
-    audio = lfilter(b,a,audio)
-    audio[audio < 0.3*max(audio)] = 0
-    peaks = find_peaks(audio)
-    #min_peak_distance = np.min(np.diff(peaks))/fs
-    #print(np.diff(peaks))
-    #min_frame_distance = int(0.1*min_peak_distance*FPS)+1
+# output
+print(x_center,y_center)
+print(r_center_x,r_center_y)
+print(N_peaks)
+print(N_bounces)
+print(N_start_frame)
 
-    """t_audio_last_peak = peaks[-1]/fs
-    t_video_last_bounce = bounces[-1]/FPS
-    t_audio_starts = t_video_last_bounce - t_audio_last_peak
-    N_frame_audio_starts = int(t_audio_starts*FPS)"""
-    #print(t_audio_peak)
-    #print(first_bounce_ind/FPS)
-    #print('')
-    #t_audio_start = first_bounce_ind/FPS - t_audio_peak
-    #N_frame_audio_start = int(t_audio_start*FPS)
-
-    # output
-    print(x_center,y_center)
-    print(r_center_x,r_center_y)
-    print(len(peaks))
-    print(N_bounces)
-    #print(N_frame_audio_starts)
-    print('')

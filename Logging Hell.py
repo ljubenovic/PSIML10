@@ -75,10 +75,10 @@ def read_file(file_path, word_counts, warning_timestamps):
 
 
 def find_most_frequent_words(word_counts):
+    
 
     word_counts = sorted(word_counts.items(), key=lambda x: x[0])
     word_counts.sort(key=lambda x: x[1], reverse=True)
-
     if len(word_counts) >= 5:
         top_words = word_counts[:5]
         top_words = [word_tuple[0] for word_tuple in top_words]
@@ -107,7 +107,7 @@ def find_longest_period(warning_timestamps):
 
 # ---main---
 
-path = r'public1\set\10'
+path = r'public1\set\5'
 #path = input()
 file_paths = list_files(path)
 
